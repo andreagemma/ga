@@ -159,13 +159,14 @@ Track multiple operations simultaneously:
 ```python
 timer = TicToc()
 
-# Start different timers
+# Start timer
 timer.tic("download")
-timer.tic("processing")
 
 # ... do download work ...
 download_time = timer.elapsed_time("download")
 
+# Start a different timer
+timer.tic("processing")
 # ... do processing work ...
 processing_time = timer.elapsed_time("processing")
 ```
@@ -312,7 +313,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Changelog
 
-### v0.1.0
+### v2025.10.19
 - Initial release
 - Core timing functionality
 - Progress tracking and logging
