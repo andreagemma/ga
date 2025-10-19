@@ -1,0 +1,320 @@
+# TicToc Timer Utility
+
+A comprehensive Python library for monitoring script execution times, measuring performance, and tracking progress with detailed logging capabilities.
+
+## Overview
+
+TicToc provides a set of classes for monitoring and measuring execution times in Python applications. It's particularly useful for tracking the progress of long-running tasks, measuring performance, and estimating completion times.
+
+## Features
+
+- **High-precision timing**: Measure execution times with microsecond accuracy
+- **Progress tracking**: Monitor progress with iteration counters and completion estimates
+- **Speed calculation**: Calculate processing speed in various time units
+- **Flexible logging**: Customizable log messages with extensive placeholder support
+- **Named timers**: Support multiple concurrent timers with unique names
+- **Time conversions**: Easy conversion between different time units and formats
+- **Arithmetic operations**: Full support for mathematical operations on time intervals
+
+## Installation
+
+```bash
+pip install tictoc-timer
+```
+
+Or clone this repository:
+
+```bash
+git clone <repository-url>
+cd tictoc
+pip install -e .
+```
+
+## Quick Start
+
+```python
+from ga.tictoc import TicToc
+import time
+
+# Basic timing
+timer = TicToc()
+timer.tic()  # Start timing
+
+# Your code here
+time.sleep(2)
+
+print(f"Elapsed time: {timer.elapsed_time()}")
+# Output: Elapsed time: 2.00 s
+
+# Progress tracking
+timer = TicToc()
+timer.tic()
+
+for i in range(100):
+    # Your processing here
+    time.sleep(0.01)
+    
+    # Log progress every 10 iterations
+    if i % 10 == 0:
+        elapsed = timer.elapsed_time()
+        speed = timer.speed(i+1)
+        print(f"Processed {i+1} items in {elapsed} at {speed.at_hours:.1f} items/hour")
+```
+
+## Core Classes
+
+### TicToc - Main Timer Class
+
+The primary class for timing operations and tracking progress.
+
+```python
+from ga.tictoc import TicToc
+import logging
+
+# Basic setup
+timer = TicToc()
+
+# With logging
+logger = logging.getLogger(__name__)
+timer = TicToc(logger=logger)
+
+# With progress tracking
+timer = TicToc(tot=1000)  # Expecting 1000 total iterations
+```
+
+#### Key Methods
+
+- `tic(name=None, tot=None)`: Start/restart timer
+- `elapsed_time(name=None)`: Get elapsed time since last tic
+- `remaining_time(i, tot=None, name=None)`: Estimate remaining time
+- `speed(i=None, name=None)`: Calculate processing speed
+- `info/debug/warning/error/critical()`: Log progress at different levels
+
+### TicTocTime - Time Storage Class
+
+Stores a specific time instant with conversion capabilities.
+
+```python
+from ga.tictoc import TicTocTime
+import time
+
+# Create from current time
+now = TicTocTime(time.time())
+
+# Access in different formats
+print(f"Seconds: {now.seconds}")
+print(f"Minutes: {now.minutes}")
+print(f"Hours: {now.hours}")
+print(f"Formatted: {now}")  # Uses default format
+
+# Custom format
+custom_time = TicTocTime(time.time(), format="%H:%M:%S")
+print(f"Custom format: {custom_time}")
+```
+
+### TicTocInterval - Time Duration Class
+
+Represents a time interval with arithmetic operations support.
+
+```python
+from ga.tictoc import TicTocInterval
+
+# Create intervals
+interval1 = TicTocInterval(3600)  # 1 hour in seconds
+interval2 = TicTocInterval(1800)  # 30 minutes
+
+# Arithmetic operations
+total = interval1 + interval2
+print(f"Total: {total}")  # 1:30:00
+
+# Unit conversions
+print(f"Hours: {interval1.hours}")
+print(f"Minutes: {interval1.minutes}")
+print(f"Formatted: {interval1.string}")
+```
+
+### TicTocSpeed - Speed Measurement Class
+
+Tracks and converts processing speeds between different time units.
+
+```python
+from ga.tictoc import TicTocSpeed, TicTocInterval
+
+# Create from operations and time
+speed = TicTocSpeed(n=100, t=TicTocInterval(60))  # 100 ops in 60 seconds
+
+# Access in different units
+print(f"Per second: {speed.at_seconds}")
+print(f"Per minute: {speed.at_minutes}")
+print(f"Per hour: {speed.at_hours}")
+print(f"Per day: {speed.at_days}")
+```
+
+## Advanced Usage
+
+### Named Timers
+
+Track multiple operations simultaneously:
+
+```python
+timer = TicToc()
+
+# Start different timers
+timer.tic("download")
+timer.tic("processing")
+
+# ... do download work ...
+download_time = timer.elapsed_time("download")
+
+# ... do processing work ...
+processing_time = timer.elapsed_time("processing")
+```
+
+### Progress Logging with Custom Formats
+
+```python
+import logging
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+timer = TicToc(logger=logger, tot=1000)
+timer.tic()
+
+# Custom format string
+custom_format = "Progress: {counter}/{tot} ({counter_percent:.1f}%) - Speed: {speed_h:.0f}/h - ETA: {remaining_time}"
+
+for i in range(1000):
+    # Your work here
+    
+    # Log every 100 iterations with custom format
+    if i % 100 == 0:
+        timer.info(i=i, each=100, info_format=custom_format, 
+                  counter_percent=(i/1000)*100)
+```
+
+### Format Placeholders
+
+The logging methods support extensive placeholders:
+
+#### Basic Counters
+- `{counter}`, `{i}`: Current iteration number
+- `{tot}`: Total expected iterations
+
+#### Time Measurements (with unit suffixes: `_s`, `_m`, `_h`, `_d`, `_string`)
+- `{elapsed_time}`, `{et}`: Time since last tic()
+- `{elapsed_origin_time}`, `{eot}`: Time since timer creation
+- `{remaining_time}`, `{rt}`: Estimated remaining time
+- `{total_time}`, `{tt}`: Estimated total time
+
+#### Speed Measurements (with unit suffixes)
+- `{speed}`, `{v}`: Processing speed
+
+#### Timestamps
+- `{start_time}`, `{start}`: Timer start time
+- `{end_time}`, `{end}`: Estimated completion time
+- `{origin_time}`, `{origin}`: Timer creation time
+
+Example usage:
+```python
+format_string = """
+Progress Report:
+- Completed: {counter}/{tot} items ({percent:.1f}%)
+- Elapsed: {elapsed_time_string}
+- Speed: {speed_h:.1f} items/hour
+- Remaining: {remaining_time_string}
+- ETA: {end_time}
+"""
+
+timer.info(i=current_item, percent=(current_item/total)*100, 
+          info_format=format_string)
+```
+
+### Performance Monitoring Example
+
+```python
+import time
+import logging
+from ga.tictoc import TicToc
+
+# Setup
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+def process_large_dataset(data_size=10000):
+    timer = TicToc(logger=logging.getLogger(__name__), tot=data_size)
+    timer.tic()
+    
+    for i in range(data_size):
+        # Simulate work
+        time.sleep(0.001)
+        
+        # Log progress every 1000 items
+        timer.info(i=i+1, each=1000)
+    
+    # Final summary
+    total_time = timer.elapsed_time()
+    final_speed = timer.speed(data_size)
+    
+    print(f"\nProcessing completed!")
+    print(f"Total time: {total_time}")
+    print(f"Average speed: {final_speed.at_hours:.1f} items/hour")
+
+# Run the example
+process_large_dataset(5000)
+```
+
+## API Reference
+
+### TicToc Class
+
+**Constructor**: `TicToc(t=None, i=None, tot=None, logger=None, info_format=None, info_tot_format=None, dt_format=None)`
+
+**Methods**:
+- `tic(name=None, tot=None)` → `float`: Start/restart timer
+- `elapsed_time(t=None, name=None)` → `TicTocInterval`: Get elapsed time
+- `remaining_time(i=None, tot=None, name=None)` → `TicTocInterval`: Estimate remaining time
+- `total_time(i=None, tot=None, name=None)` → `TicTocInterval`: Estimate total time
+- `speed(i=None, name=None)` → `TicTocSpeed`: Calculate processing speed
+- `start_time(name=None)` → `TicTocTime`: Get timer start time
+- `end_time(i=None, tot=None, name=None)` → `TicTocTime`: Estimate completion time
+- `info/debug/warning/error/critical(i=None, tot=None, each=None, **kwargs)` → `TicToc`: Log progress
+
+### TicTocTime Class
+
+**Constructor**: `TicTocTime(t, format="%Y-%m-%d %H:%M:%S")`
+
+**Properties**: `seconds`, `minutes`, `hours`, `days`, `timedelta`, `datetime`
+
+### TicTocInterval Class
+
+**Constructor**: `TicTocInterval(sec)`
+
+**Properties**: `seconds`, `minutes`, `hours`, `days`, `string`
+**Operations**: `+`, `-`, `*`, `/` (with numbers and other intervals)
+
+### TicTocSpeed Class
+
+**Constructor**: `TicTocSpeed(v=None, t=None, n=None)`
+
+**Properties**: `v` (speed), `n` (operations), `t` (time), `at_seconds`, `at_minutes`, `at_hours`, `at_days`
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Changelog
+
+### v0.1.0
+- Initial release
+- Core timing functionality
+- Progress tracking and logging
+- Named timers support
+- Comprehensive format placeholders

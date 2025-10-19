@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ga"
+version = "0.1.0"
+description = "Librerie di utilità generali per Python"
+authors = [{ name="Tuo Nome", email="tuaemail@example.com" }]
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
