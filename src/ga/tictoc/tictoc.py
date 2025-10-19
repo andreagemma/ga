@@ -513,7 +513,7 @@ class TicToc:
                     "aliases": ("v", "speed"),
                     "expr": ("self.speed(i=i) if i is not None else None",),
                     "def": ("string",),
-                    "units": ("s:seconds", "m:minutes", "h:hours", "d:days", "str:string"),
+                    "units": ("s:at_seconds", "m:at_minutes", "h:at_hours", "d:at_days", "str:string"),
                 },
                 {
                     "aliases": ("rt", "remaining_time"),
