@@ -1,6 +1,6 @@
 import unittest
 import warnings
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, Mock
 
 import sys
@@ -159,9 +159,9 @@ class TestTicTocTime(unittest.TestCase):
 
     def test_addition_with_datetime(self):
         """Test addition with datetime."""
-        dt = datetime.fromtimestamp(100)
+        dt = datetime.fromtimestamp(100, tz=timezone.utc)
         result = self.tictoc_time + dt
-        self.assertEqual(result.t, self.test_timestamp + 100)
+        self.assertEqual(result.t, self.tictoc_time.t + 100)
 
     def test_right_addition(self):
         """Test right-hand addition."""
