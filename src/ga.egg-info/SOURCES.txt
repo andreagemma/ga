@@ -2,7 +2,6 @@ LICENSE
 README.md
 pyproject.toml
 setup.py
-src/ga/ctest/ctest_module.cpp
 src/ga/__init__.py
 src/ga.egg-info/PKG-INFO
 src/ga.egg-info/SOURCES.txt
@@ -15,4 +14,5 @@ src/ga/tictoc/tictoc.py
 src/ga/tictoc/tictoc_interval.py
 src/ga/tictoc/tictoc_speed.py
 src/ga/tictoc/tictoc_time.py
+tests/test_ctest.py
 tests/test_tictoc_time.py

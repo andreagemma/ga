@@ -1,0 +1,5 @@
+blosc
+dill
+snappy
+pandas
+geopandas
