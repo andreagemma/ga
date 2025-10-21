@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ga"
-version = "2025.10.21"
+version = "2025.10.22"
 description = "Librerie di utilità generali per Python"
 authors = [{ name="Andrea Gemma", email="andrea.gemma@gmail.com" }]
 readme = "README.md"

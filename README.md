@@ -1,16 +1,19 @@
 # GA - General Algorithms Library
 
-A comprehensive Python library providing utilities for monitoring script execution times, measuring performance, tracking progress with detailed logging capabilities, and advanced data serialization with multiple compression algorithms.
+A comprehensive Python library providing utilities for monitoring script execution times, measuring performance, tracking progress with detailed logging capabilities, advanced data serialization with multiple compression algorithms, and inter-process communication.
 
 ## Overview
 
-This library provides two main modules:
+This library provides three main modules:
 
 ### TicToc Module
 A set of classes for monitoring and measuring execution times in Python applications. It's particularly useful for tracking the progress of long-running tasks, measuring performance, and estimating completion times.
 
 ### IO Module  
 Advanced data serialization utilities with support for multiple compression algorithms, providing efficient storage and transmission of Python objects.
+
+### IPC Module
+Inter-process communication utilities providing both Redis-based distributed communication and shared memory solutions for multi-process applications.
 
 ## Features
 
@@ -29,6 +32,14 @@ Advanced data serialization utilities with support for multiple compression algo
 - **File and memory operations**: Both in-memory and file-based serialization
 - **Performance optimization**: Choose the best compression for your use case
 - **Cross-platform compatibility**: Works with standard library and external compression libraries
+
+### IPC Module
+- **Redis-based communication**: Distributed pub/sub messaging with automatic serialization
+- **Shared memory storage**: High-performance key-value store using multiprocessing
+- **Bucket organization**: Logical separation of data with namespace support
+- **Thread-safe operations**: Concurrent access across multiple processes
+- **Flexible serialization**: Custom serialization and compression support
+- **Redis-like API**: Familiar interface for easy adoption
 
 ## Installation
 
@@ -129,6 +140,95 @@ def process_and_save_data(size=100000):
 process_and_save_data()
 ```
 
+### IPC Usage Examples
+
+#### Redis-Based Communication
+
+```python
+import time
+from ga.ipc.redis_ipc import RedisIPC
+
+# Publisher process
+def publisher():
+    redis_ipc = RedisIPC(channel="data_channel")
+    
+    for i in range(10):
+        message = {"id": i, "data": f"Message {i}", "timestamp": time.time()}
+        redis_ipc.publish(message)
+        print(f"Published: {message}")
+        time.sleep(1)
+
+# Subscriber process
+def subscriber():
+    redis_ipc = RedisIPC(channel="data_channel")
+    
+    def handle_message(message, metadata):
+        print(f"Received: {message} from {metadata['channel']}")
+    
+    redis_ipc.subscribe(handle_message)
+    # Runs indefinitely, listening for messages
+
+# In practice, run publisher() and subscriber() in separate processes
+```
+
+#### Shared Memory Storage
+
+```python
+import multiprocessing as mp
+from ga.ipc.shared_memory import SharedMemory
+
+def worker_process(worker_id, shared_store):
+    """Worker process that processes data from shared memory."""
+    sm = SharedMemory(bucket="tasks")
+    
+    while True:
+        # Check for new tasks
+        task_key = f"task_{worker_id}"
+        if task_key in sm:
+            task_data = sm.pop(task_key)
+            print(f"Worker {worker_id} processing: {task_data}")
+            
+            # Process the task
+            result = {"worker_id": worker_id, "result": task_data["value"] * 2}
+            
+            # Store result
+            sm.set(f"result_{worker_id}", result)
+        
+        time.sleep(0.1)
+
+def main():
+    # Create shared memory store
+    sm = SharedMemory(bucket="tasks")
+    
+    # Start worker processes
+    processes = []
+    for i in range(3):
+        p = mp.Process(target=worker_process, args=(i, None))
+        p.start()
+        processes.append(p)
+    
+    # Distribute tasks
+    for i in range(10):
+        worker_id = i % 3
+        task = {"task_id": i, "value": i * 10}
+        sm.set(f"task_{worker_id}", task)
+    
+    # Check results
+    time.sleep(2)
+    results_sm = SharedMemory(bucket="tasks")
+    for i in range(3):
+        result_key = f"result_{i}"
+        if result_key in results_sm:
+            print(f"Result from worker {i}: {results_sm.get(result_key)}")
+    
+    # Cleanup
+    for p in processes:
+        p.terminate()
+
+if __name__ == "__main__":
+    main()
+```
+
 ## Core Classes
 
 ### TicToc - Main Timer Class
@@ -218,6 +318,61 @@ print(f"Per hour: {speed.at_hours}")
 print(f"Per day: {speed.at_days}")
 ```
 
+### RedisIPC - Redis-Based Communication
+
+Distributed messaging system using Redis pub/sub with automatic serialization.
+
+```python
+from ga.ipc.redis_ipc import RedisIPC
+
+# Publisher
+publisher = RedisIPC(channel="notifications")
+publisher.publish({"message": "Hello", "timestamp": time.time()})
+
+# Subscriber
+subscriber = RedisIPC(channel="notifications")
+
+def message_handler(data, metadata):
+    print(f"Received: {data}")
+
+subscriber.subscribe(message_handler, timeout=10)
+```
+
+**Key Features:**
+- Automatic serialization with compression support
+- Thread-safe callback management
+- Custom serialization functions
+- Timeout handling for subscriptions
+
+### SharedMemory - Multiprocessing Key-Value Store
+
+High-performance shared memory storage with Redis-like interface.
+
+```python
+from ga.ipc.shared_memory import SharedMemory
+
+# Basic usage
+sm = SharedMemory(bucket="cache")
+sm.set("user:123", {"name": "Alice", "age": 30})
+user = sm.get("user:123")
+
+# Dictionary-style access
+sm["counter"] = 0
+sm["counter"] += 1
+count = sm["counter"]
+
+# Bucket organization
+user_cache = SharedMemory(bucket="users")
+session_cache = SharedMemory(bucket="sessions")
+```
+
+**Key Features:**
+- Bucket-based data organization
+- Thread-safe operations across processes
+- Automatic serialization and compression
+- Dictionary-style interface
+- Iterator support for keys, values, and items
+
 ## Advanced Usage
 
 ### Named Timers
@@ -237,6 +392,132 @@ download_time = timer.elapsed_time("download")
 timer.tic("processing")
 # ... do processing work ...
 processing_time = timer.elapsed_time("processing")
+```
+
+### Advanced IPC Patterns
+
+#### Producer-Consumer with Shared Memory
+
+```python
+import multiprocessing as mp
+from ga.ipc.shared_memory import SharedMemory
+import time
+
+def producer(num_items):
+    """Producer process that generates tasks."""
+    sm = SharedMemory(bucket="tasks")
+    
+    for i in range(num_items):
+        task = {
+            "id": i,
+            "data": f"Task {i}",
+            "priority": i % 3,
+            "created": time.time()
+        }
+        sm.set(f"task_{i}", task)
+        print(f"Produced task {i}")
+        time.sleep(0.1)
+    
+    # Signal completion
+    sm.set("_complete", True)
+
+def consumer(consumer_id):
+    """Consumer process that processes tasks."""
+    sm = SharedMemory(bucket="tasks")
+    processed = 0
+    
+    while True:
+        # Look for available tasks
+        found_task = False
+        for key in sm.scan_iter("task_*"):
+            task = sm.pop(key)
+            if task:
+                print(f"Consumer {consumer_id} processing {task['id']}")
+                # Simulate processing
+                time.sleep(0.2)
+                processed += 1
+                found_task = True
+                break
+        
+        # Check if producer is complete and no more tasks
+        if not found_task and sm.get("_complete", False):
+            break
+        
+        time.sleep(0.1)
+    
+    print(f"Consumer {consumer_id} processed {processed} tasks")
+
+# Usage
+if __name__ == "__main__":
+    # Start producer
+    p1 = mp.Process(target=producer, args=(20,))
+    
+    # Start multiple consumers
+    consumers = [mp.Process(target=consumer, args=(i,)) for i in range(3)]
+    
+    p1.start()
+    for c in consumers:
+        c.start()
+    
+    # Wait for completion
+    p1.join()
+    for c in consumers:
+        c.join()
+```
+
+#### Redis Pub/Sub with Error Handling
+
+```python
+from ga.ipc.redis_ipc import RedisIPC
+import logging
+import time
+
+def robust_subscriber():
+    """Subscriber with robust error handling."""
+    redis_ipc = RedisIPC(channel="events", compression="lz4")
+    
+    def handle_event(data, metadata):
+        try:
+            event_type = data.get("type")
+            if event_type == "user_action":
+                print(f"User {data['user_id']} performed {data['action']}")
+            elif event_type == "system_alert":
+                print(f"ALERT: {data['message']}")
+            else:
+                print(f"Unknown event: {data}")
+        except Exception as e:
+            logging.error(f"Error processing event: {e}")
+    
+    # Subscribe with timeout and retry logic
+    retry_count = 0
+    max_retries = 3
+    
+    while retry_count < max_retries:
+        try:
+            print(f"Starting subscriber (attempt {retry_count + 1})")
+            redis_ipc.subscribe(handle_event, timeout=30)
+            break  # Success
+        except Exception as e:
+            retry_count += 1
+            logging.error(f"Subscription failed: {e}")
+            if retry_count < max_retries:
+                time.sleep(5)  # Wait before retry
+
+def event_publisher():
+    """Publisher that sends various types of events."""
+    redis_ipc = RedisIPC(channel="events", compression="lz4")
+    
+    events = [
+        {"type": "user_action", "user_id": 123, "action": "login"},
+        {"type": "system_alert", "message": "High CPU usage detected"},
+        {"type": "user_action", "user_id": 456, "action": "purchase"},
+        {"type": "custom", "data": {"key": "value"}},
+    ]
+    
+    for event in events:
+        redis_ipc.publish(event)
+        print(f"Published: {event}")
+        time.sleep(1)
 ```
 
 ### Progress Logging with Custom Formats

@@ -1,5 +1,6 @@
 blosc
 dill
 snappy
+redis
 pandas
 geopandas
