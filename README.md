@@ -13,7 +13,7 @@ A set of classes for monitoring and measuring execution times in Python applicat
 Advanced data serialization utilities with support for multiple compression algorithms, providing efficient storage and transmission of Python objects.
 
 ### IPC Module
-Inter-process communication utilities providing both Redis-based distributed communication and shared memory solutions for multi-process applications.
+Inter-process communication utilities providing Redis-based distributed communication, Redis-backed shared memory, and multiprocessing shared memory solutions for both local and distributed applications.
 
 ## Features
 
@@ -35,11 +35,13 @@ Inter-process communication utilities providing both Redis-based distributed com
 
 ### IPC Module
 - **Redis-based communication**: Distributed pub/sub messaging with automatic serialization
-- **Shared memory storage**: High-performance key-value store using multiprocessing
+- **Redis shared memory**: Network-accessible key-value store with persistence
+- **Local shared memory**: High-performance multiprocessing-based storage  
 - **Bucket organization**: Logical separation of data with namespace support
 - **Thread-safe operations**: Concurrent access across multiple processes
 - **Flexible serialization**: Custom serialization and compression support
 - **Redis-like API**: Familiar interface for easy adoption
+- **Cross-machine compatibility**: Distributed access for Redis-based solutions
 
 ## Installation
 
@@ -171,7 +173,61 @@ def subscriber():
 # In practice, run publisher() and subscriber() in separate processes
 ```
 
-#### Shared Memory Storage
+#### Redis-Based Shared Memory (Distributed)
+
+```python
+from ga.ipc.redis_shared_memory import RedisSharedMemory
+import time
+
+# Distributed cache accessible across machines
+def setup_distributed_cache():
+    """Set up a distributed cache using Redis."""
+    # Connect to Redis server (can be remote)
+    cache = RedisSharedMemory(
+        bucket="app_cache",
+        host="redis.example.com",  # Remote Redis server
+        port=6379,
+        compression="lz4"
+    )
+    
+    # Store application data
+    cache.set("config", {
+        "debug": False,
+        "max_connections": 1000,
+        "timeout": 30
+    })
+    
+    # Store user session (accessible from any machine)
+    cache["session:user123"] = {
+        "user_id": 123,
+        "role": "admin", 
+        "expires": time.time() + 3600
+    }
+    
+    return cache
+
+def worker_with_distributed_cache():
+    """Worker that uses distributed cache."""
+    cache = RedisSharedMemory(bucket="app_cache", host="redis.example.com")
+    
+    # Check configuration (shared across all workers)
+    config = cache.get("config", {})
+    max_conn = config.get("max_connections", 100)
+    
+    # Access user session from any machine
+    if "session:user123" in cache:
+        session = cache["session:user123"]
+        print(f"User {session['user_id']} has role: {session['role']}")
+    
+    # Store processing results
+    cache.set("result:batch_1", {"processed": True, "count": 500})
+
+# Usage across different machines/processes
+cache = setup_distributed_cache()
+worker_with_distributed_cache()
+```
+
+#### Local Shared Memory (Multiprocessing)
 
 ```python
 import multiprocessing as mp
@@ -373,6 +429,38 @@ session_cache = SharedMemory(bucket="sessions")
 - Dictionary-style interface
 - Iterator support for keys, values, and items
 
+### RedisSharedMemory - Distributed Key-Value Store
+
+Redis-backed shared memory for distributed applications with network accessibility.
+
+```python
+from ga.ipc.redis_shared_memory import RedisSharedMemory
+
+# Local Redis
+rsm = RedisSharedMemory(bucket="cache")
+rsm.set("data", {"value": 123})
+
+# Remote Redis with compression
+rsm = RedisSharedMemory(
+    bucket="shared_data",
+    host="redis.example.com",
+    port=6379,
+    compression="lz4"
+)
+
+# Dictionary-style access
+rsm["session:abc"] = {"user": 456, "expires": 1234567890}
+session = rsm.get("session:abc", {})
+```
+
+**Key Features:**
+- Redis backend for persistence and distribution
+- Network accessibility across machines
+- Automatic serialization with compression
+- Bucket-based namespace isolation
+- Dictionary-style interface
+- Cross-platform distributed access
+
 ## Advanced Usage
 
 ### Named Timers
@@ -519,6 +607,227 @@ def event_publisher():
         print(f"Published: {event}")
         time.sleep(1)
 ```
+
+#### Distributed Session Management
+
+```python
+from ga.ipc.redis_shared_memory import RedisSharedMemory
+import time
+import hashlib
+
+class DistributedSessionManager:
+    """Session management across distributed web servers."""
+    
+    def __init__(self, redis_host="localhost", redis_port=6379):
+        self.sessions = RedisSharedMemory(
+            bucket="sessions",
+            host=redis_host,
+            port=redis_port,
+            compression="lz4"
+        )
+        self.users = RedisSharedMemory(
+            bucket="users", 
+            host=redis_host,
+            port=redis_port
+        )
+    
+    def create_session(self, user_id: int, user_data: dict) -> str:
+        """Create a new user session."""
+        session_id = hashlib.sha256(f"{user_id}_{time.time()}".encode()).hexdigest()[:16]
+        
+        session_data = {
+            "user_id": user_id,
+            "created_at": time.time(),
+            "expires_at": time.time() + 3600,  # 1 hour
+            "data": user_data,
+            "active": True
+        }
+        
+        self.sessions.set(session_id, session_data)
+        self.users.set(str(user_id), {"last_session": session_id})
+        
+        return session_id
+    
+    def get_session(self, session_id: str) -> dict:
+        """Retrieve session data (from any server)."""
+        session = self.sessions.get(session_id, {})
+        
+        if session and session.get("expires_at", 0) > time.time():
+            return session
+        elif session:
+            # Session expired, cleanup
+            self.sessions.delete(session_id)
+        
+        return {}
+    
+    def update_session(self, session_id: str, data: dict):
+        """Update session data."""
+        session = self.get_session(session_id)
+        if session:
+            session["data"].update(data)
+            session["expires_at"] = time.time() + 3600  # Extend expiration
+            self.sessions.set(session_id, session)
+
+# Usage across multiple web servers
+session_mgr = DistributedSessionManager(redis_host="shared-redis.example.com")
+session_id = session_mgr.create_session(123, {"role": "admin"})
+session = session_mgr.get_session(session_id)
+```
+
+## Performance Testing
+
+The library includes comprehensive performance testing for comparing SharedMemory and RedisSharedMemory implementations.
+
+### Available Performance Tests
+
+#### 1. Demo Performance Tests (No Redis Required)
+
+Quick demonstration of performance differences using mock Redis:
+
+```bash
+python tests/test_performance_demo.py
+```
+
+**Features:**
+- Mock Redis with simulated network delays
+- No external dependencies required
+- Demonstrates ~10-25x local speedup
+- Validates identical results between implementations
+
+**Sample Output:**
+```
+=== Small Data Test (5 items) ===
+Local SharedMemory:     0.0010s (10,194.7 ops/sec)
+Mock Redis SharedMemory: 0.0114s (873.9 ops/sec)
+Speedup factor: 11.67x (Local faster)
+Results match: True
+```
+
+#### 2. Full Performance Tests (Redis Required)
+
+Comprehensive testing with real Redis server:
+
+```bash
+# Start Redis server first
+redis-server
+
+# Run full performance tests
+python tests/test_performance_comparison.py
+```
+
+**Features:**
+- Real Redis network overhead testing
+- Compression performance comparison
+- Concurrent access patterns
+- Mixed workload scenarios
+- Large data performance analysis
+
+**Test Categories:**
+- **Basic Operations**: Set/get performance for small datasets
+- **Bulk Operations**: Dictionary-style interface performance
+- **Large Data**: Performance with 100KB+ payloads
+- **Iteration**: Keys/values/items iteration performance
+- **Concurrent Access**: Multi-process performance patterns
+- **Mixed Workload**: Read/write/delete operation mixes
+- **Compression**: Performance impact of compression algorithms
+
+#### 3. Performance Guide
+
+Comprehensive guide for understanding and running performance tests:
+
+```bash
+python tests/performance_guide.py
+```
+
+**Includes:**
+- Implementation comparison recommendations
+- Expected performance characteristics
+- Optimization tips and best practices
+- Troubleshooting guide
+- Example usage patterns
+
+### Performance Characteristics
+
+#### SharedMemory (Multiprocessing)
+- **Small data**: 10,000-100,000+ ops/sec
+- **Latency**: ~0.1-1ms per operation
+- **Memory**: Direct process memory access
+- **Best for**: Single-machine, high-performance scenarios
+
+#### RedisSharedMemory (Network)
+- **Small data**: 1,000-10,000 ops/sec (network dependent)
+- **Latency**: 1-10ms+ per operation
+- **Memory**: Redis server + serialization overhead
+- **Best for**: Distributed applications, persistent storage
+
+### Quick Performance Comparison
+
+```python
+from ga.ipc.shared_memory import SharedMemory
+from ga.ipc.redis_shared_memory import RedisSharedMemory
+import time
+
+# Setup
+local_sm = SharedMemory(bucket='perf_test')
+redis_sm = RedisSharedMemory(bucket='perf_test')
+
+# Test data
+test_data = {'key1': 'value1', 'key2': [1, 2, 3], 'key3': {'nested': True}}
+
+# Time local operations
+start = time.perf_counter()
+for k, v in test_data.items():
+    local_sm.set(k, v)
+for k in test_data.keys():
+    result = local_sm.get(k)
+local_time = time.perf_counter() - start
+
+# Time Redis operations  
+start = time.perf_counter()
+for k, v in test_data.items():
+    redis_sm.set(k, v)
+for k in test_data.keys():
+    result = redis_sm.get(k)
+redis_time = time.perf_counter() - start
+
+print(f'Local: {local_time:.4f}s, Redis: {redis_time:.4f}s')
+print(f'Speedup: {redis_time/local_time:.1f}x (Local faster)')
+```
+
+### Choosing the Right Implementation
+
+**Use SharedMemory when:**
+- Single machine deployment
+- High performance requirements (>10k ops/sec)
+- Low latency critical (<1ms)
+- Simple deployment (no external dependencies)
+
+**Use RedisSharedMemory when:**
+- Distributed application across machines
+- Data persistence required
+- Shared state between different services
+- Moderate performance acceptable (1-10k ops/sec)
+- Redis infrastructure already available
+
+### Performance Optimization Tips
+
+#### For Both Implementations
+- Use compression for large data (>1KB)
+- Batch operations when possible
+- Consider data structure design
+- Profile serialization overhead
+
+#### For RedisSharedMemory
+- Use connection pooling
+- Optimize Redis configuration
+- Consider Redis Cluster for scaling
+- Monitor network performance
+- Use pipelining for bulk operations
+
+#### For SharedMemory
+- Monitor memory usage
+- Consider process architecture
+- Optimize for data locality
 
 ### Progress Logging with Custom Formats
 

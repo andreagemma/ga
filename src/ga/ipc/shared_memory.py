@@ -56,29 +56,6 @@ class _SharedKVStore:
         """
         return self._store.get(key, default)
 
-    def __getitem__(self, key: str) -> Any:
-        """Retrieve a value using dictionary-style access.
-        
-        Args:
-            key: The key to retrieve the value for.
-            
-        Returns:
-            The stored value.
-            
-        Raises:
-            KeyError: If the key doesn't exist.
-        """
-        return self._store[key]
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        """Store a value using dictionary-style assignment.
-        
-        Args:
-            key: The key to store the value under.
-            value: The value to store.
-        """
-        self._store[key] = value
-
     def setdefault(self, key: str, value: Any) -> Any | None:
         """Set a default value for a key if it doesn't exist.
         
@@ -101,6 +78,15 @@ class _SharedKVStore:
             The removed value or None if key doesn't exist.
         """
         return self._store.pop(key, None)
+    
+    def delete(self, key: str) -> None:
+        """Remove a key from the store.
+        
+        Args:
+            key: The key to remove.
+        """
+        if key in self._store:
+            del self._store[key]
 
     def keys(self) -> list[str]:
         """Return a list of all keys in the store.
@@ -109,17 +95,6 @@ class _SharedKVStore:
             List of keys present in the store.
         """
         return list(self._store.keys())
-
-    def __contains__(self, key: str) -> bool:
-        """Check if a key exists in the store.
-        
-        Args:
-            key: The key to check for existence.
-            
-        Returns:
-            True if key exists, False otherwise.
-        """
-        return key in self._store
 
     def has_key(self, key: str) -> bool:
         """Check if a key exists in the store (alternative to __contains__).
@@ -139,14 +114,6 @@ class _SharedKVStore:
             The number of stored key-value pairs.
         """
         return len(self._store)
-
-    def __delitem__(self, name: str) -> None:
-        """Remove a key from the store using del statement.
-        
-        Args:
-            name: The key to remove.
-        """
-        self._store.pop(name, None)
 
     def clear(self) -> None:
         """Remove all keys and values from the store."""
@@ -430,6 +397,14 @@ class SharedMemory:
         """
         data = self.client.pop(self._key(key))
         return self.__loads(data) if data is not None else None
+    
+    def delete(self, key: str) -> None:
+        """Remove a key from the store.
+        
+        Args:
+            key: The key to remove.
+        """
+        self.client.delete(self._key(key))
 
     def clear(self):
         """Remove all keys from the current bucket.

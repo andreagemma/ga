@@ -71,7 +71,7 @@ class IPC:
         """
         Elimina una chiave dal key-value store.
         """
-        self.shdmem.delete(key)
+        self.shdmem.pop(key)
     def clear(self)-> None:
         """
         Elimina tutte le chiavi dal key-value store.
