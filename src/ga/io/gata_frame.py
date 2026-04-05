@@ -257,29 +257,6 @@ class GataFrame:
             return self
         else:
             return self._create_from_relation(new_df, op=op)
-
-    def select(self,  *cols: Iterable[str | Iterable[str]], inplace: bool=False) -> GataFrame:
-        list_of_cols: list[str] = []
-        for col in cols:
-            if isinstance(col, str):
-                list_of_cols.append(col)
-            else:
-                list_of_cols.extend(col) # pyright: ignore[reportArgumentType]
-        list_of_cols =list(list_of_cols)
-        
-        if not bool(list_of_cols):
-            new_df = self._rel.project("*")
-            op =f"project(*)"
-        else:
-            op =f"select({', '.join(list_of_cols)})"
-            new_df = self._rel.select(', '.join(list_of_cols))
-        if inplace:
-            self._rel = new_df
-            self._reset()
-            self.append_op(op)
-            return self
-        else:
-            return self._create_from_relation(new_df, op=op)        
         
     def project(self, *cols: Iterable[str | Iterable[str]], inplace: bool=False, include_others: bool=False) -> GataFrame:
         list_of_cols: list[str] = []
@@ -291,7 +268,7 @@ class GataFrame:
         list_of_cols =list(list_of_cols)
         new_df: DuckDBPyRelation | None = None
         if not bool(list_of_cols):
-            if include_others==False:
+            if include_others==True:
                 new_df = self._rel.project("*")
                 op = f"project(*)"
             else:
@@ -299,14 +276,29 @@ class GataFrame:
                 op = f"select()"
         else:
             if include_others==False:
-                list_cols = ', '.join('"' + str(c).strip('"') + '"' for c in list_of_cols)
+                list_cols = ', '.join(list_of_cols)
                 new_df = self._rel.select(list_cols)
-                op = f"select({', '.join(list_of_cols)})"
+                op = f"select({list_cols})"
             else:
-                list_cols = ', '.join('"' + str(c).strip('"') + '"' for c in cols)
-                list_cols_str = ', '.join('\'' + str(c).strip('"') + '\'' for c in cols)
-                sql = f" {list_cols} "
-                sql += f", COLUMNS(lambda x: x NOT IN ({list_cols_str}))"
+                list_cols = ', '.join(list_of_cols)
+                tmp = self._rel.project(f"{list_cols}").limit(0)
+                new_cols: list[str] = tmp.columns
+                to_replace: list[str] = []
+                to_add: list[str] = []
+                df_cols: list[str] = self._rel.columns
+                for c, expr in zip(new_cols, list_of_cols):
+                    c = c.strip().strip('"')
+                    if c not in df_cols:
+                        to_add.append(expr)
+                    else:
+                        to_replace.append(expr)
+                to_replace_str = "REPLACE (" + ', '.join(str(c) for c in to_replace) + ")"
+                to_add_str = ', '.join(str(c) for c in to_add)
+                sql = " * "
+                if to_replace:
+                    sql += to_replace_str
+                if to_add:
+                    sql += f", {to_add_str}"
                 new_df = self._rel.project(sql)            
                 op = f"project({', '.join(list_of_cols)})"
         if inplace:
@@ -316,6 +308,8 @@ class GataFrame:
             return self
         else:
             return self._create_from_relation(new_df, op=op)
+
+    select = project
 
     def filter(self, filter_expr: str, inplace: bool=False) -> GataFrame:
         new_df = self._rel.filter(filter_expr)
