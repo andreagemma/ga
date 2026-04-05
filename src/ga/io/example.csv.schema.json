@@ -1,0 +1,139 @@
+{
+    "fields": [
+        {
+            "metadata": {"description": "Campo Ignorato"},
+            "name": "dataset_id",
+            "type": "varchar",
+            "type_width": 1
+        },
+        {
+            "metadata": {"description": "Identificativo del veicolo"},
+            "name": "device_id",
+            "nullable": true,
+            "type": "varchar",
+            "generator": {
+                "expr": "concat_ws(device_id,dataset_id) ",
+                "type": "string"
+            }    
+        },
+        {
+            "metadata": {"description": "Data e ora del record FCD"},
+            "name": "dt",
+            "nullable": true,
+            "type": "timestamp",
+            "format": "%Y-%m-%d %H:%M:%S.%f", 
+            "tz": "Europe/Rome"
+        },
+        {
+            "metadata": {"description": "Data e ora dell'arrivo FCD"},
+            "name": "dt_arrival",
+            "nullable": true,
+            "type": "timestamptz",
+            "format": "%Y-%m-%d %H:%M:%S.%f %z"
+        },        
+        {
+            "metadata": {"description": "Latitudine del veicolo"},
+            "name": "lat",
+            "nullable": true,
+            "type": "double",
+            "decimal_sep": ","
+        },
+        {
+            "metadata": {"description": "Longitudine del veicolo"},
+            "name": "lon",
+            "nullable": true,
+            "type": "double",
+            "decimal_sep": ","
+        },
+        {
+            "metadata": {"description": "Velocità del veicolo", "unit": "km/h"},
+            "name": "speed",
+            "nullable": true,
+            "type": "float"
+        },
+        {
+            "metadata": {"description": "Direzione del veicolo 0=nord, 90=est, 180=sud, 270=ovest"},
+            "name": "heading",
+            "nullable": true,
+            "type": "integer"
+        },
+        {
+            "metadata": {"description": "Qualità del segnale del veicolo (<40 ottima, <70 accettabile, >=70 buona)"},
+            "name": "quality",
+            "nullable": true,
+            "type": "long"
+        },
+        {
+            "metadata": {"description": "Stato del motore del veicolo. 1: acceso, 0: spento"},
+            "name": "engine",
+            "nullable": true,
+            "type": "string",
+            "generator": {
+                "expr": "CASE when engine='on' then 0 when engine='off' then 2 else 1 end",
+                "type": "integer"
+            }
+        },
+        {
+            "metadata": {"description": "Tipo di veicolo (1: veicolo per uso privato o promiscuo, 2: veicolo commerciale)"},
+            "name": "veh_type",
+            "nullable": true,
+            "type": "string",
+            "generator": {
+                "expr": "CASE when veh_type=1 then 'car' else 'dv' end",
+                "type": "string"
+            }
+        }
+    ],
+    "additional_fields": [
+        {
+            "metadata": {"description": "Identificativo univoco del record FCD"},
+            "name": "id_fcd",
+            "expr": "uuidv7()",
+            "type": "string"
+        },
+        [
+            {
+                "metadata": {"description": "Identificativo univoco del record FCD"},
+                "name": "id_fcd_1",
+                "expr": "uuidv7()",
+                "type": "string"
+            },
+            {
+                "metadata": {"description": "Identificativo univoco del record FCD del veicolo"},
+                "name": "id_fcd_vehicle",
+                "type": "string",
+                "expr:": "row_number() over (partition by device_id order by dt)"
+            }
+        ],
+        {
+            "metadata": {"description": "Geometry del record FCD"},
+            "name": "geom",
+            "type": "geometry",
+            "expr:": "ST_Point(lon, lat)"
+        },
+        [
+            {
+                "metadata": {"description": "Geometry del record FCD"},
+                "name": "geom1",
+                "type": "geometry",
+                "expr:": "ST_Transform(geom, 'OGC:CRS84', 'EPSG:6875')"
+            }
+        ]
+    ],
+    "project": ["id_fcd", "id_fcd_1", "id_fcd_vehicle", "device_id", "dt", "dt_arrival", "lat", "lon", "speed", "heading", "quality", "engine", "veh_type", "geom"],
+    "metadata": {
+        "provider": "Viasat", 
+        "description": "File FCD 2019-10, sia privati che commerciali",
+        "crs": { "geom": "EPSG:4326" }
+    },
+    "pre_limit": 100,
+    "pre_filter": "veh_type=1",
+    "filter": "speed > 20",
+    "limit": 100,
+    "reader": {
+        "header": false,
+        "format": "csv",
+        "nrows": 1000,
+        "sep": ";"
+    }
+}

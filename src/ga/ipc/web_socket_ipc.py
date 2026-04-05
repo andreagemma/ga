@@ -1,19 +1,20 @@
 import asyncio
-import websockets
+try:
+    import websockets
+    from websockets.sync.client import connect as ws_connect
+    from websockets.exceptions import WebSocketException
+    import websockets.sync
+    import websockets.sync.client
+except ImportError:
+    pass
 import pickle
 import socket
-from websockets.sync.client import connect as ws_connect
-from websockets.exceptions import WebSocketException
 from collections import defaultdict
 
-import websockets.sync
-import websockets.sync.client
 import threading
 import logging
-try:
-    import dill as pickle
-except ImportError:
-    import pickle
+
+from ..io.serializer import Serializer
 
 class WebSocketIPC:
     """
@@ -54,7 +55,7 @@ class WebSocketIPC:
                 if isinstance(message, str):
                     self.logger.debug(f"Received message: {message}")
                 else:
-                    data = pickle.loads(message)
+                    data = Serializer.loads(message)
                     msg_type = data.get("type")
                     channel = data.get("channel")
                     if msg_type == "ping":
@@ -80,7 +81,7 @@ class WebSocketIPC:
 
     async def broadcast(self, channel, payload):
         """Invia un messaggio a tutti i client sottoscritti a uno specifico canale."""
-        msg = pickle.dumps({"channel": channel, "message": payload})
+        msg = Serializer.dumps({"channel": channel, "message": payload})
         for ws, chans in self.clients.items():
             if channel in chans:
                 try:
@@ -92,7 +93,7 @@ class WebSocketIPC:
         """Sottoscrive il client al canale e registra una callback."""
         self.logger.debug(f"Subscribing to channel '{channel}'")
         self.callbacks[channel].append(callback)
-        self.conn.send(pickle.dumps({
+        self.conn.send(Serializer.dumps({
             "type": "subscribe",
             "channel": channel
         }))
@@ -103,7 +104,7 @@ class WebSocketIPC:
         while True:
             try:
                 data = self.conn.recv()
-                msg = pickle.loads(data)
+                msg = Serializer.loads(data)
                 if isinstance(msg.get("message"), str):
                     self.logger.debug(f"Received message: {msg}")
                 else:
@@ -124,7 +125,7 @@ class WebSocketIPC:
             "channel": channel,
             "message": message
         }
-        self.conn.send(pickle.dumps(msg))
+        self.conn.send(Serializer.dumps(msg))
         if isinstance(message, str):
             self.logger.debug(f"Publishing: {message}")
         else:
@@ -157,13 +158,13 @@ class WebSocketIPC:
             with ws_connect(uri, open_timeout=1.0, close_timeout=1.0) as ws:
                 # 3. Invia messaggio 'ping'
                 msg = {"type": "ping", "message": str(self.__class__)}
-                ws.send(pickle.dumps(msg))
+                ws.send(Serializer.dumps(msg))
 
                 # 4. Ricevi risposta
                 data = ws.recv()
 
                 # 5. Verifica la risposta
-                if data == str(self.__class__):
+                if Serializer.loads(data) == str(self.__class__):
                     return True
 
         except (socket.timeout, WebSocketException, OSError):

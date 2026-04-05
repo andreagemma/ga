@@ -4,7 +4,7 @@ import warnings
 from typing import Any
 
 try:
-    import dill as pickle # pyright: ignore[reportMissingTypeStubs]
+    import dill as pickle # pyright: ignore[reportMissingTypeStubs, reportMissingImports]
 except ImportError:
     import pickle
 
@@ -56,7 +56,8 @@ class Serializer:
     CNAME_DEFAULT: str | None = None  # Default compression method (no compression)
     CLEVEL_DEFAULT: int = 5           # Default compression level (1-9 range)
 
-    def dumps(self: Any, compression: str | None = None, clevel: int = 5) -> bytes:
+    @staticmethod
+    def dumps(data: Any, compression: str | None = None, clevel: int = 5, to_string: bool = False) -> bytes | str:
         """Serialize an object to bytes with optional compression.
         
         Converts the given object to a byte string using pickle serialization, optionally
@@ -76,6 +77,9 @@ class Serializer:
             AssertionError: If an unsupported compression method is specified.
             ValueError: If compression fails for any other reason.
         """
+        assert isinstance(clevel, int) and 1 <= clevel <= 9, f"clevel must be an integer between 1 and 9, got {clevel}"
+        assert isinstance(to_string, bool), f"to_string must be a boolean, got {type(to_string).__name__}"
+        assert data is not None, "data cannot be None"
         # Validate compression method against supported algorithms
         assert compression in (None, 
                                Serializer.CNAME_BLOSCLZ, 
@@ -96,37 +100,37 @@ class Serializer:
                            Serializer.CNAME_ZLIB, 
                            Serializer.CNAME_ZSTD):
             try:
-                import blosc # pyright: ignore[reportMissingImports]
+                import blosc # pyright: ignore[reportMissingImports, reportMissingModuleSource]
             except ImportError:
                 compression = None
                 warnings.warn("blosc is not installed. Please install it to use this compression method. Compression set to None.")
         elif compression in (Serializer.CNAME_GZIP,):
             try:
-                import gzip
+                import gzip # pyright: ignore[reportMissingImports, reportMissingModuleSource]
             except ImportError:
                 compression = None
                 warnings.warn("gzip is not installed. Please install it to use this compression method. Compression set to None.")
         elif compression in (Serializer.CNAME_BZ2,):
             try:
-                import bz2
+                import bz2 # pyright: ignore[reportMissingImports, reportMissingModuleSource]
             except ImportError:
                 compression = None
                 warnings.warn("bz2 is not installed. Please install it to use this compression method. Compression set to None.")
         elif compression in (Serializer.CNAME_ZIP,):
             try:
-                import zipfile
+                import zipfile # pyright: ignore[reportMissingImports, reportMissingModuleSource]
             except ImportError:
                 compression = None
                 warnings.warn("zipfile is not installed. Please install it to use this compression method. Compression set to None.")
         elif compression in (Serializer.CNAME_LZMA,):
             try:
-                import lzma
+                import lzma # pyright: ignore[reportMissingImports, reportMissingModuleSource]
             except ImportError:
                 compression = None
                 warnings.warn("lzma is not installed. Please install it to use this compression method. Compression set to None.")
         elif compression in (Serializer.CNAME_SNAPPY,):
             try:
-                import snappy # pyright: ignore[reportMissingImports]
+                import snappy # pyright: ignore[reportMissingImports, reportMissingModuleSource]
             except ImportError:
                 compression = None
                 warnings.warn("snappy is not installed. Please install it to use this compression method. Compression set to None.")
@@ -136,30 +140,31 @@ class Serializer:
             compression = None
             
         # Serialize the object to bytes using pickle
-        pickled = pickle.dumps(self) # pyright: ignore[reportUnknownMemberType]
+        pickled: bytes = pickle.dumps(data) # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
 
         # Apply compression based on the selected method
         # Each compression method has its own specific parameters and behavior
+        ret: bytes | None = None
         if compression is None:
             # No compression requested, return raw pickled data
-            return pickled
+            ret = pickled # pyright: ignore[reportUnknownVariableType]
         elif compression in (Serializer.CNAME_BLOSCLZ, 
                              Serializer.CNAME_LZ4, 
                              Serializer.CNAME_LZ4HC, 
                              Serializer.CNAME_ZLIB, 
                              Serializer.CNAME_ZSTD):
             # Use Blosc library for high-performance compression
-            import blosc 
-            return blosc.compress(pickled, typesize=8, cname=compression, clevel=clevel) # type: ignore
+            import blosc  # pyright: ignore[reportMissingImports, reportMissingModuleSource]
+            ret = blosc.compress(pickled, typesize=8, cname=compression, clevel=clevel) # type: ignore
         elif compression == Serializer.CNAME_GZIP:
-            import gzip
-            return gzip.compress(pickled, compresslevel=clevel)
+            import gzip # pyright: ignore[reportMissingImports, reportMissingModuleSource]
+            ret = gzip.compress(pickled, compresslevel=clevel) # pyright: ignore[reportUnknownArgumentType]
         elif compression == Serializer.CNAME_BZ2:
             import bz2
-            return bz2.compress(pickled, compresslevel=clevel)
+            ret = bz2.compress(pickled, compresslevel=clevel) # pyright: ignore[reportUnknownArgumentType]
         elif compression == Serializer.CNAME_ZIP:
             # Use ZIP format compression with in-memory buffer
-            import zipfile           
+            import zipfile # pyright: ignore[reportMissingImports, reportMissingModuleSource]
             zip_buffer = io.BytesIO()
             # Choose compression type based on level (0 = no compression)
             if clevel ==0:
@@ -168,19 +173,25 @@ class Serializer:
                 compression_type = zipfile.ZIP_DEFLATED
             with zipfile.ZipFile(zip_buffer, "w", compression=compression_type, compresslevel=clevel) as zf:
                 with zf.open("temp.pkl", "w") as f:
-                    f.write(pickled)
-            return zip_buffer.getvalue()
+                    f.write(pickled) # pyright: ignore[reportUnknownArgumentType]
+            ret = zip_buffer.getvalue()
         elif compression == Serializer.CNAME_LZMA:
-            import lzma
-            return lzma.compress(pickled, preset=clevel)
+            import lzma # pyright: ignore[reportMissingImports, reportMissingModuleSource]
+            ret = lzma.compress(pickled, preset=clevel) # pyright: ignore[reportUnknownArgumentType]
         elif compression == Serializer.CNAME_SNAPPY:
-            import snappy
-            return snappy.compress(pickled) # type: ignore
+            import snappy # pyright: ignore[reportMissingImports, reportMissingModuleSource]
+            ret = snappy.compress(pickled) # type: ignore
         else:
             raise ValueError(f"Compression {compression} not supported.")
+        if ret is None:
+            raise ValueError("Compression failed for unknown reasons.")
+        if to_string:
+            return ret.hex() # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        else:
+            return ret # pyright: ignore[reportUnknownVariableType]
 
     @staticmethod
-    def loads(data: bytes | None, compression: str | None = None) -> Any:
+    def loads(data: bytes | str | None, compression: str | None = None) -> Any:
         """Deserialize bytes to an object with optional decompression.
         
         Converts compressed or uncompressed byte data back to the original Python object.
@@ -199,6 +210,8 @@ class Serializer:
             AssertionError: If an unsupported compression method is specified.
             Various exceptions: If decompression or deserialization fails.
         """
+        assert isinstance(compression, (str, type(None))), f"compression must be a string or None, got {type(compression).__name__}"
+        assert data is None or isinstance(data, (bytes, str)), f"data must be bytes, str, or None, got {type(data).__name__}"
         # Validate compression method against supported algorithms
         assert compression in (None, 
                                Serializer.CNAME_BLOSCLZ, 
@@ -211,41 +224,44 @@ class Serializer:
                                Serializer.CNAME_BZ2, 
                                Serializer.CNAME_ZIP, 
                                Serializer.CNAME_LZMA), f"compression {compression} not supported"
+        # Handle edge cases for empty or None data
+        if data is None or len(data) == 0:
+            return None
         
         # Check availability of decompression libraries and fallback if needed
         if compression in (Serializer.CNAME_BLOSCLZ, Serializer.CNAME_LZ4, Serializer.CNAME_LZ4HC, Serializer.CNAME_ZLIB, Serializer.CNAME_ZSTD):
             try:
-                import blosc
+                import blosc # pyright: ignore[reportMissingImports, reportMissingModuleSource]
             except ImportError:
                 compression = None
                 warnings.warn("blosc is not installed. Please install it to use this compression method. Compression set to None.")
         elif compression in (Serializer.CNAME_GZIP,):
             try:
-                import gzip
+                import gzip # pyright: ignore[reportMissingImports, reportMissingModuleSource]
             except ImportError:
                 compression = None
                 warnings.warn("gzip is not installed. Please install it to use this compression method. Compression set to None.")
         elif compression in (Serializer.CNAME_BZ2,):
             try:
-                import bz2
+                import bz2 # pyright: ignore[reportMissingImports, reportMissingModuleSource]
             except ImportError:
                 compression = None
                 warnings.warn("bz2 is not installed. Please install it to use this compression method. Compression set to None.")
         elif compression in (Serializer.CNAME_ZIP,):
             try:
-                import zipfile
+                import zipfile # pyright: ignore[reportMissingImports, reportMissingModuleSource]
             except ImportError:
                 compression = None
                 warnings.warn("zipfile is not installed. Please install it to use this compression method. Compression set to None.")
         elif compression in (Serializer.CNAME_LZMA,):
             try:
-                import lzma
+                import lzma # pyright: ignore[reportMissingImports, reportMissingModuleSource]
             except ImportError:
                 compression = None
                 warnings.warn("lzma is not installed. Please install it to use this compression method. Compression set to None.")
         elif compression in (Serializer.CNAME_SNAPPY,):
             try:
-                import snappy
+                import snappy # pyright: ignore[reportMissingImports, reportMissingModuleSource]
             except ImportError:
                 compression = None
                 warnings.warn("snappy is not installed. Please install it to use this compression method. Compression set to None.")
@@ -254,39 +270,40 @@ class Serializer:
                 warnings.warn(f"Compression {compression} not supported. Compression set to None.")
             compression = None
 
-        # Handle edge cases for empty or None data
-        if data is None or len(data) == 0:
-            return data
+
+        
+        if isinstance(data,str):
+            data = bytes.fromhex(data)
 
         # Apply decompression based on the method used during serialization
         if compression is None:
             # No decompression needed, directly unpickle the data
-            return pickle.loads(data) # pyright: ignore[reportUnknownMemberType]
+            return pickle.loads(data) # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         elif compression in (Serializer.CNAME_BLOSCLZ, Serializer.CNAME_LZ4, Serializer.CNAME_LZ4HC, Serializer.CNAME_ZLIB, Serializer.CNAME_ZSTD):
             # Use Blosc library for decompression
-            import blosc
+            import blosc # pyright: ignore[reportMissingImports, reportMissingModuleSource]
             return pickle.loads(blosc.decompress(data)) # type: ignore
         elif compression == Serializer.CNAME_GZIP:
-            import gzip
-            return pickle.loads(gzip.decompress(data)) # pyright: ignore[reportUnknownMemberType]
+            import gzip # pyright: ignore[reportMissingImports, reportMissingModuleSource]
+            return pickle.loads(gzip.decompress(data)) # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         elif compression == Serializer.CNAME_BZ2:
-            import bz2
-            return pickle.loads(bz2.decompress(data)) # pyright: ignore[reportUnknownMemberType]
+            import bz2 # pyright: ignore[reportMissingImports, reportMissingModuleSource]
+            return pickle.loads(bz2.decompress(data)) # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         elif compression == Serializer.CNAME_ZIP:
             # Extract from ZIP archive in memory
-            import zipfile
+            import zipfile # pyright: ignore[reportMissingImports, reportMissingModuleSource]
             with zipfile.ZipFile(io.BytesIO(data), 'r') as zf:
                 with zf.open("temp.pkl") as f:
-                    return pickle.load(f) # pyright: ignore[reportUnknownMemberType]
+                    return pickle.load(f) # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         elif compression == Serializer.CNAME_LZMA:
-            import lzma
-            return pickle.loads(lzma.decompress(data)) # pyright: ignore[reportUnknownMemberType]
+            import lzma # pyright: ignore[reportMissingImports, reportMissingModuleSource]
+            return pickle.loads(lzma.decompress(data)) # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         elif compression == Serializer.CNAME_SNAPPY:
-            import snappy
+            import snappy # pyright: ignore[reportMissingImports, reportMissingModuleSource]
             return pickle.loads(snappy.decompress(data)) # type: ignore
                 
     @staticmethod
-    def dump(data: Any, path: str | Path , compression: str | None = None, clevel: int = 5):
+    def dump(data: Any, path: str | Path , compression: str | None = None, clevel: int = 5, to_string: bool = False) -> None:
         """Save an object to a file with optional compression.
         
         Serializes the given object and saves it to the specified file path.
@@ -298,15 +315,17 @@ class Serializer:
             path: File path where the data should be saved. Can be a string or Path object.
             compression: Optional compression algorithm to use. See dumps() for details.
             clevel: Compression level (1-9). See dumps() for details.
-            
+            to_string: If True, serialize the data to a string instead of writing to a file.
         Raises:
             IOError: If the file cannot be written.
             Other exceptions: As raised by dumps() method.
         """
         path = Path(path)
-        compressed_data = Serializer.dumps(data, compression=compression, clevel=clevel)
+        compressed_data: bytes | str = Serializer.dumps(data, compression=compression, clevel=clevel, to_string=to_string) # pyright: ignore[reportUnknownVariableType]
         with open(path, 'wb') as f:
-            f.write(compressed_data) # pyright: ignore[reportUnknownMemberType, reportUndefinedVariable]
+            f.write(compressed_data) # pyright: ignore[reportArgumentType]
+
+    save = dump  # Alias for backward compatibility and convenience
 
     @staticmethod
     def load(path: str, compression: str | None = None) -> Any:

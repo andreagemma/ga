@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from .tictoc_time import TicTocTime
-from .tictoc_interval import TicTocInterval
-from .tictoc_speed import TicTocSpeed
-
 import logging
 from typing import Any
 import time
 from time import time
 import string
 from warnings import warn
+
+from .tictoc_time import TicTocTime
+from .tictoc_interval import TicTocInterval
+from .tictoc_speed import TicTocSpeed
+
+from ..utils import dynamic_round
 
 """Timer utility classes for monitoring script execution times.
 
@@ -427,9 +429,9 @@ class TicToc:
             return TicTocTime(0)
 
     def str_info(self,
+                 info_format: str | None = None, 
                  i: int | float | None = None, 
                  tot: int | float | None = None,                 
-                 info_format: str | None = None, 
                  dt_format: str | None = None,
                  logger: logging.Logger | None = None,
                  **kwargs: dict[str, Any]) -> str:
@@ -495,41 +497,41 @@ class TicToc:
             params: dict[str, Any] = {}
 
             vals: list[dict[str, tuple[str, ...] | list[str]]] = [
-                {"aliases": ("counter", "i"), "expr": ("counter",)},
+                {"aliases": ("counter", "i"), "expr": ("i",)},
                 {"aliases": ("tot",), "expr": ("tot",)},
                 {
                     "aliases": ("et", "elapsed_time"),
                     "expr": ("self.elapsed_time()",),
                     "def": ("string",),
-                    "units": ("s:seconds", "m:minutes", "h:hours", "d:days", "str:string"),
+                    "units": ("s:dynamic_round(v.seconds)", "m:dynamic_round(v.minutes)", "h:dynamic_round(v.hours)", "d:dynamic_round(v.days)", "str:string"),
                 },
                 {
                     "aliases": ("eot", "elapsed_origin_time"),
                     "expr": ("self.elapsed_origin_time()",),
                     "def": ("string",),
-                    "units": ("s:seconds", "m:minutes", "h:hours", "d:days", "str:string"),
+                    "units": ("s:dynamic_round(v.seconds)", "m:dynamic_round(v.minutes)", "h:dynamic_round(v.hours)", "d:dynamic_round(v.days)", "str:string"),
                 },
                 {
                     "aliases": ("v", "speed"),
                     "expr": ("self.speed(i=i) if i is not None else None",),
                     "def": ("string",),
-                    "units": ("s:at_seconds", "m:at_minutes", "h:at_hours", "d:at_days", "str:string"),
+                    "units": ("s:dynamic_round(v.at_seconds)", "m:dynamic_round(v.at_minutes)", "h:dynamic_round(v.at_hours)", "d:dynamic_round(v.at_days)", "str:string"),
                 },
                 {
                     "aliases": ("rt", "remaining_time"),
-                    "expr": ("self.remaining_time(i=i, tot=tot) if counter is not None and tot is not None else None",),
+                    "expr": ("self.remaining_time(i=i, tot=tot) if i is not None and tot is not None else None",),
                     "def": ("string",),
-                    "units": ("s:seconds", "m:minutes", "h:hours", "d:days", "str:string"),
+                    "units": ("s:dynamic_round(v.seconds)", "m:dynamic_round(v.minutes)", "h:dynamic_round(v.hours)", "d:dynamic_round(v.days)", "str:string"),
                 },
                 {
                     "aliases": ("tt", "total_time"),
-                    "expr": ("self.total_time(i=i, tot=tot) if counter is not None and tot is not None else None",),
+                    "expr": ("self.total_time(i=i, tot=tot) if i is not None and tot is not None else None",),
                     "def": ("string",),
-                    "units": ("s:seconds", "m:minutes", "h:hours", "d:days", "str:string"),
+                    "units": ("s:dynamic_round(v.at_seconds)", "m:dynamic_round(v.at_minutes)", "h:dynamic_round(v.at_hours)", "d:dynamic_round(v.at_days)", "str:string"),
                 },
-                {"aliases": ("end", "end_time"), "expr": ("self.end_time()",), "def": ("self.to_string(dt_format)",), "units": ("str:v.to_string(dt_format)",)},
-                {"aliases": ("start", "start_time"), "expr": ("self.start_time()",), "def": ("self.to_string(dt_format)",), "units": ("str:v.to_string(dt_format)",)},
-                {"aliases": ("origin", "origin_time"), "expr": ("self.origin_time()",), "def": ("self.to_string(dt_format)", ), "units": ("str:v.to_string(dt_format)",)},
+                {"aliases": ("end", "end_time"), "expr": ("self.end_time(i=i, tot=tot)",), "def": ("v.to_string(dt_format)",), "units": ("str:v.to_string(dt_format)",)},
+                {"aliases": ("start", "start_time"), "expr": ("self.start_time()",), "def": ("v.to_string(dt_format)",), "units": ("str:v.to_string(dt_format)",)},
+                {"aliases": ("origin", "origin_time"), "expr": ("self.origin_time()",), "def": ("v.to_string(dt_format)", ), "units": ("str:v.to_string(dt_format)",)},
             ]
 
             for val in vals:
@@ -538,7 +540,10 @@ class TicToc:
                     if alias in fields:
                         v = v if v is not None else eval(val["expr"][0])
                         if isinstance(v, (TicTocTime, TicTocInterval, TicTocSpeed)):
-                            params[alias] = getattr(v, val["def"][0])
+                            if not hasattr(v, val["def"][0]):
+                                params[alias] = eval(val["def"][0])            
+                            else:
+                                params[alias] = getattr(v, val["def"][0])
                         else:
                             params[alias] = v
                     units: tuple[str,...] = tuple()
@@ -550,7 +555,7 @@ class TicToc:
                         if name in fields:
                             v = v if v is not None else eval(val["expr"][0])
                             if isinstance(v, (TicTocTime, TicTocInterval, TicTocSpeed)):
-                                if unit_name.startswith("v."):
+                                if not hasattr(v, unit_name):
                                     params[name] = eval(unit_name)            
                                 else:
                                     params[name] = getattr(v, unit_name)
@@ -570,12 +575,13 @@ class TicToc:
             return ""
         
     def info(self, 
+             info_format: str | None = None, 
              i: int | float | None = None, 
              tot: int | float | None = None,                 
              each: int | float | None = None,
-             info_format: str | None = None, 
              dt_format: str | None = None,
              logger: logging.Logger | None = None,
+             plain=False,
              **kwargs: dict[str, Any]) -> TicToc:
         """Log progress information at INFO level.
         
@@ -632,10 +638,10 @@ class TicToc:
         return self
 
     def debug(self, 
+             info_format: str | None = None, 
              i: int | float | None = None, 
              tot: int | float | None = None,                 
              each: int | float | None = None,
-             info_format: str | None = None, 
              dt_format: str | None = None,
              logger: logging.Logger | None = None,
              **kwargs: dict[str, Any]) -> TicToc:
@@ -693,10 +699,10 @@ class TicToc:
         return self
     
     def warning(self, 
+             info_format: str | None = None, 
              i: int | float | None = None, 
              tot: int | float | None = None,                 
              each: int | float | None = None,
-             info_format: str | None = None, 
              dt_format: str | None = None,
              logger: logging.Logger | None = None,
              **kwargs: dict[str, Any]) -> TicToc:
@@ -754,10 +760,10 @@ class TicToc:
         return self
 
     def error(self, 
+             info_format: str | None = None, 
              i: int | float | None = None, 
              tot: int | float | None = None,                 
              each: int | float | None = None,
-             info_format: str | None = None, 
              dt_format: str | None = None,
              logger: logging.Logger | None = None,
              **kwargs: dict[str, Any]) -> TicToc:
@@ -815,10 +821,10 @@ class TicToc:
         return self
 
     def critical(self, 
+                 info_format: str | None = None, 
                  i: int | float | None = None, 
                  tot: int | float | None = None,                 
                  each: int | float | None = None,
-                 info_format: str | None = None, 
                  dt_format: str | None = None,
                  logger: logging.Logger | None = None,
                  **kwargs: dict[str, Any]) -> TicToc:

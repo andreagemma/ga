@@ -4,3 +4,6 @@ snappy
 redis
 pandas
 geopandas
+duckdb
+pydantic
+joblib
