@@ -5,77 +5,13 @@ from typing import Literal, Any
 import re
 
 from pydantic import AliasChoices, BaseModel, Field, ConfigDict, field_validator, RootModel, model_validator
-
+from .conversion_types import DUCKDB_TYPE_ALIASES
 
 # Canonical DuckDB types and aliases.
 # The "type" field of SchemaField accepts any string, but it is
 # normalized to a canonical DuckDB-compatible representation using
 # these aliases and simple parsing rules (including LIST/ARRAY, MAP, STRUCT).
-DUCKDB_TYPE_ALIASES: dict[str, str] = {
-    # string-like
-    "string": "VARCHAR",
-    "str": "VARCHAR",
-    "varchar": "VARCHAR",
-    "char": "VARCHAR",
-    "bpchar": "VARCHAR",
-    "text": "VARCHAR",
 
-    # boolean
-    "bool": "BOOLEAN",
-    "boolean": "BOOLEAN",
-
-    # integers
-    "tinyint": "TINYINT",
-    "int1": "TINYINT",
-    "smallint": "SMALLINT",
-    "int2": "SMALLINT",
-    "int16": "SMALLINT",
-    "short": "SMALLINT",
-    "int": "INTEGER",
-    "integer": "INTEGER",
-    "int4": "INTEGER",
-    "int32": "INTEGER",
-    "bigint": "BIGINT",
-    "int8": "BIGINT",
-    "int64": "BIGINT",
-    "long": "BIGINT",
-    "hugeint": "HUGEINT",
-    "int128": "HUGEINT",
-
-    "utinyint": "UTINYINT",
-    "uint8": "UTINYINT",
-    "usmallint": "USMALLINT",
-    "uint16": "USMALLINT",
-    "uinteger": "UINTEGER",
-    "uint32": "UINTEGER",
-    "ubigint": "UBIGINT",
-    "uint64": "UBIGINT",
-    "uhugeint": "UHUGEINT",
-    "uint128": "UHUGEINT",
-
-
-    # floating point / decimals
-    "real": "FLOAT",
-    "float4": "FLOAT",
-    "float": "DOUBLE",
-    "double": "DOUBLE",
-    "float8": "DOUBLE",
-    "decimal": "DECIMAL",
-    "numeric": "DECIMAL",
-
-    # temporal
-    "date": "DATE",
-    "time": "TIME",
-    "timestamp": "TIMESTAMP",
-    "timestamptz": "TIMESTAMPTZ",
-
-    # other common types
-    "uuid": "UUID",
-    "blob": "BLOB",
-    "binary": "BLOB",
-    "geometry": "GEOMETRY",
-    "json": "JSON",
-}
 
 
 def _normalize_duckdb_type(type_str: str) -> str:

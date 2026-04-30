@@ -108,7 +108,7 @@
         {
             "metadata": {"description": "Geometry del record FCD"},
             "name": "geom",
-            "type": "geometry",
+            "type": "geometry('OGC:CRS84')",
             "expr:": "ST_Point(lon, lat)"
         },
         [

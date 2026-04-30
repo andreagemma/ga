@@ -5,7 +5,7 @@ import time
 from typing import Literal, Iterable
 import warnings
 
-def remove_path(path: str | Path | list[str | Path] | tuple[str | Path] | None) -> None:
+def remove_path(path: str | Path | list[str | Path] | list[Path] | list[str] | tuple[str | Path]  | tuple[Path] | tuple[str] | None) -> None:
     """
     Remove a file or directory. If a list or tuple of paths is provided, all will be removed.
 
@@ -47,7 +47,7 @@ def clean_folder(
         )
     else:
         try:
-            import joblib # pyright: ignore[reportMissingImports, reportUnusedImport]
+            import joblib # pyright: ignore[reportMissingTypeStubs, reportMissingImports, reportUnusedImport]
         except ImportError:
             warnings.warn("joblib is not installed, falling back to single-threaded cleanup. Install joblib for faster performance.", UserWarning)
             return _clean_folder(
@@ -165,7 +165,7 @@ def _clean_folder_parallel(
     Supports optional recursive scanning and removal of empty directories.
     """
     try:
-        from joblib import Parallel, delayed # pyright: ignore[reportMissingImports, reportUnknownVariableType]
+        from joblib import Parallel, delayed # pyright: ignore[reportMissingTypeStubs, reportMissingImports, reportUnknownVariableType]
     except ImportError:
         raise ImportError("joblib is required for parallel cleanup. Install it with 'pip install joblib'.")
     unit_seconds = {
@@ -229,11 +229,11 @@ def _clean_folder_parallel(
             for i in range(0, len(files_to_delete), batch_size)
         ]
 
-        results: Iterable[int] = Parallel(n_jobs=n_jobs, prefer="threads")( # pyright: ignore[reportUnknownVariableType]
+        results: Iterable[int] = Parallel(n_jobs=n_jobs, prefer="threads")( # pyright: ignore[reportUnknownVariableType, reportAssignmentType]
             delayed(_delete_batch)(b) for b in batches
-        ) 
+        )
 
-        if results is not None:
+        if results is not None: # pyright: ignore[reportUnnecessaryComparison]
             deleted = sum(results) # pyright: ignore[reportUnknownArgumentType] 
         else:
             deleted = 0

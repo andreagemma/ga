@@ -69,11 +69,11 @@ class DynamicGraphElement(AbstractGraphElement, dict[Hashable, Any], Generic[T])
         return self["_type"]
 
 
-class DynamicNode(AbstractNode, DynamicGraphElement):
+class DynamicNode(AbstractNode, DynamicGraphElement[Any]):
     """Node element of a graph."""
 
     def __init__(self, idx: Hashable, **kwargs: Any):
-        DynamicGraphElement.__init__(self, idx=idx, **kwargs)
+        DynamicGraphElement[Any].__init__(self, idx=idx, **kwargs)
         self["_type"] = "node"
 
     @property
@@ -88,11 +88,11 @@ class DynamicNode(AbstractNode, DynamicGraphElement):
     def j(self) -> Hashable:
         return self["idx"]
 
-class DynamicLink(AbstractLink, DynamicGraphElement):
+class DynamicLink(AbstractLink, DynamicGraphElement[Any]):
     """Link element of a graph."""
 
-    def __init__(self, idx: Hashable, i: Hashable, j: Hashable, **kwargs: dict[Hashable, Any]):
-        DynamicGraphElement.__init__(self, idx=idx, i=i, j=j, **kwargs)
+    def __init__(self, idx: Hashable, i: Hashable, j: Hashable, **kwargs: Any):
+        DynamicGraphElement[Any].__init__(self, idx=idx, i=i, j=j, **kwargs)
         self["_type"] = "link"
 
     @property
@@ -108,11 +108,11 @@ class DynamicLink(AbstractLink, DynamicGraphElement):
         return self["j"]
     
 
-class DynamicTurn(AbstractTurn, DynamicGraphElement):
+class DynamicTurn(AbstractTurn, DynamicGraphElement[Any]):
     """Turn element of a graph."""
 
     def __init__(self, idx: Hashable, in_link: Hashable, out_link: Hashable, **kwargs: Any):
-        DynamicGraphElement.__init__(self, idx=idx, in_link=in_link, out_link=out_link, **kwargs)
+        DynamicGraphElement[Any].__init__(self, idx=idx, in_link=in_link, out_link=out_link, **kwargs)
 
     @property
     def idx(self) -> Hashable:
@@ -126,11 +126,11 @@ class DynamicTurn(AbstractTurn, DynamicGraphElement):
     def out_link(self) -> Hashable:
         return self["out_link"]
     
-class DynamicForwardStar(AbstractStar, DynamicGraphElement):
+class DynamicForwardStar(AbstractStar, DynamicGraphElement[Any]):
     """Star structure to manage links connected to a node."""
 
     def __init__(self, **kwargs: Any):
-        DynamicGraphElement.__init__(self, **kwargs)
+        DynamicGraphElement[Any].__init__(self, **kwargs)
 
     def add_link(self, link: DynamicLink) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
         """
@@ -163,11 +163,11 @@ class DynamicForwardStar(AbstractStar, DynamicGraphElement):
         if not d:
             self.pop(idx_from["i"], None)
 
-class DynamicBackwardStar(AbstractStar, DynamicGraphElement):
+class DynamicBackwardStar(AbstractStar, DynamicGraphElement[Any]):
     """Star structure to manage links connected to a node."""
 
     def __init__(self, **kwargs: Any):
-        DynamicGraphElement.__init__(self, **kwargs)
+        DynamicGraphElement[Any].__init__(self, **kwargs)
 
     def add_link(self, link: DynamicLink) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
         """
@@ -200,7 +200,7 @@ class DynamicBackwardStar(AbstractStar, DynamicGraphElement):
         if not d:
             self.pop(link_to["j"], None)
 
-class DynamicGraph(AbstractGraph, DynamicGraphElement):
+class DynamicGraph(AbstractGraph, DynamicGraphElement[Any]):
     """Graph structure to manage nodes, links, and turns."""
 
     def __init__(self, **kwargs: Any):

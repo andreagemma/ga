@@ -5,8 +5,12 @@ from duckdb import DuckDBPyConnection, DuckDBPyRelation, ExplainType
 from duckdb.sqltypes import DuckDBPyType
 from uuid import uuid4
 from typing import Any, Iterable
-from .data_schema import DataSchema, SchemaField, GeneratorSpec, AdditionalSchemaField, DUCKDB_TYPE_ALIASES
 import warnings
+import geopandas as gpd
+import pandas as pd
+from .data_schema import DataSchema, SchemaField, GeneratorSpec, AdditionalSchemaField
+from .conversion_types import DUCKDB_TYPE_ALIASES
+
 class GataFrame:
     
     TypeRelation = "relation"
@@ -34,15 +38,16 @@ class GataFrame:
         else:
             self._rel: DuckDBPyRelation = df._rel
 
-        self._con: DuckDBPyConnection | None = None
+        tmp_con: DuckDBPyConnection | None = None
         if isinstance(con, DuckDBPyConnection):
-            self._con = con
+            tmp_con = con
         elif con is not None:
             for _, val in con.__dict__.items():
                 if isinstance(val, DuckDBPyConnection):
-                    self._con = val
-        if self._con is None:
+                    tmp_con = val
+        if tmp_con is None:
             raise ValueError("GataFrame requires a duckdb connection or object with .connection attribute.")                            
+        self._con: DuckDBPyConnection = tmp_con   
         self._uuid: str = uuid4().hex
         self._alias: str | None = alias
         self._type = self.TypeRelation
@@ -51,7 +56,7 @@ class GataFrame:
         self._set_status(self._alias, self._type)
         self._ops: list[str] = ["init"]
 
-    def append_op(self, op: str | Iterable[str] | None):
+    def _append_op(self, op: str | Iterable[str] | None):
         if op is None:
             return
         if isinstance(op, str):
@@ -63,7 +68,7 @@ class GataFrame:
         new_df = GataFrame(rel, self._con, alias=alias, description=self._description, version=self._version+1)
         new_df._set_status(alias, type_)
         new_df._ops = self._ops.copy()
-        new_df.append_op(op)
+        new_df._append_op(op)
         return new_df
     
     @staticmethod
@@ -105,6 +110,18 @@ class GataFrame:
     def _set_inconsistent(self):
         self._set_status(None, self.TypeInconsistent)
 
+    @property
+    def uuid(self) -> str:
+        return self._uuid
+    
+    @property
+    def conection(self) -> DuckDBPyConnection:
+        return self._con
+    
+    @property
+    def relation(self) -> DuckDBPyRelation:
+        return self._rel
+    
     @property
     def get_type(self) -> str:
         return self._type
@@ -180,7 +197,7 @@ class GataFrame:
         if inplace:
             self._rel = new_df
             self._reset()
-            self.append_op(op)
+            self._append_op(op)
             return self
         else:
             return self._create_from_relation(new_df, op=op)
@@ -206,7 +223,7 @@ class GataFrame:
         if inplace:
             self._rel = new_df
             self._reset()
-            self.append_op(op)
+            self._append_op(op)
             return self
         else:
             return self._create_from_relation(new_df, op=op)
@@ -229,7 +246,7 @@ class GataFrame:
         if inplace:
             self._rel = new_df
             self._reset()
-            self.append_op(op)
+            self._append_op(op)
             return self
         else:
             return self._create_from_relation(new_df, op=op)
@@ -253,7 +270,7 @@ class GataFrame:
         if inplace:
             self._rel = new_df
             self._reset()
-            self.append_op(op)
+            self._append_op(op)
             return self
         else:
             return self._create_from_relation(new_df, op=op)
@@ -304,7 +321,7 @@ class GataFrame:
         if inplace:
             self._rel = new_df
             self._reset()
-            self.append_op(op)
+            self._append_op(op)
             return self
         else:
             return self._create_from_relation(new_df, op=op)
@@ -317,7 +334,7 @@ class GataFrame:
         if inplace:
             self._rel = new_df
             self._reset()
-            self.append_op(op)
+            self._append_op(op)
             return self
         else:
             return self._create_from_relation(new_df, op=op)
@@ -332,7 +349,7 @@ class GataFrame:
         if inplace:
             self._rel = new_df
             self._reset()
-            self.append_op(op)
+            self._append_op(op)
             return self
         else:
             return self._create_from_relation(new_df, op=op)
@@ -354,12 +371,12 @@ class GataFrame:
             self._rel = new_rel
             self._set_status(table_name, self.TypeTable)
             self._ops.clear()
-            self.append_op(op)
+            self._append_op(op)
             return self
         else:
             new_df = self._create_from_relation(new_rel, alias=table_name, type_=self.TypeTable)
             new_df._ops.clear()
-            new_df.append_op(op)
+            new_df._append_op(op)
             return new_df
     
     def createView(self, view_name: str | None =None, replace: bool=False, inplace: bool=False) -> GataFrame:
@@ -372,7 +389,7 @@ class GataFrame:
         if inplace:
             self._rel = new_rel
             self._set_status(view_name, self.TypeView)
-            self.append_op(op)
+            self._append_op(op)
             return self
         else:
             new_df = self._create_from_relation(new_rel, op=op, alias=view_name, type_=self.TypeView)
@@ -388,7 +405,7 @@ class GataFrame:
         df:GataFrame | None = status.get("df", None) if status is not None else None
         if df is not None:
             df._set_inconsistent()
-            df.append_op([f"dropTable({name})", f"-> {df._type}"])
+            df._append_op([f"dropTable({name})", f"-> {df._type}"])
         else:
             warnings.warn(f"Table '{name}' dropped, but no corresponding GataFrame found in status registry to mark as inconsistent.", UserWarning)
 
@@ -402,7 +419,7 @@ class GataFrame:
         df:GataFrame | None = status.get("df", None) if status is not None else None
         if df is not None:
             df._set_inconsistent()
-            df.append_op([f"dropView({name})", f"-> {df._type}"])
+            df._append_op([f"dropView({name})", f"-> {df._type}"])
         else:
             warnings.warn(f"View '{name}' dropped, but no corresponding GataFrame found in status registry to mark as inconsistent.", UserWarning)
 
@@ -420,10 +437,10 @@ class GataFrame:
             status: dict[str, Any] | None = GataFrame._get_status_by_name(table, type_=self.TypeTable)
             df:GataFrame | None = status.get("df", None) if status is not None else None
             if df is not None:
-                df.append_op([f"dropColumn({', '.join(list_of_cols)})"])
+                df._append_op([f"dropColumn({', '.join(list_of_cols)})"])
                 if len(df.columns) == 0:                    
                     df._set_inconsistent()                    
-                    df.append_op(f"-> {df._type} (no columns left)")
+                    df._append_op(f"-> {df._type} (no columns left)")
                     warnings.warn(f"After dropping columns, no columns left in relation \n {df}", UserWarning)
             return df
         else:
@@ -431,7 +448,7 @@ class GataFrame:
                 df = self.excludeColumn(*list_of_cols, inplace=inplace)
                 if len(df.columns) == 0:
                     df._set_inconsistent()
-                    df.append_op(f"-> {df._type} (no columns left)")
+                    df._append_op(f"-> {df._type} (no columns left)")
                     warnings.warn(f"After dropping columns, no columns left in relation \n {df}", UserWarning)
                 return df
             else:
@@ -442,10 +459,10 @@ class GataFrame:
                 op = f"dropColumn({', '.join(list_of_cols)})"
                 if inplace:
                     self._rel = self._con.table(self._alias) # pyright: ignore[reportOptionalMemberAccess]
-                    self.append_op(op)
+                    self._append_op(op)
                     if len(self.columns) == 0:
                         self._set_inconsistent()
-                        self.append_op(f"-> {self._type} (no columns left)")
+                        self._append_op(f"-> {self._type} (no columns left)")
                         warnings.warn(f"After dropping columns, no columns left in relation \n {self}", UserWarning)
                     return self
                 else:
@@ -453,7 +470,7 @@ class GataFrame:
                     df = self._create_from_relation(self._con.table(self._alias), alias=self._alias, type_=self._type, op=op)     # pyright: ignore[reportOptionalMemberAccess]
                     if len(df.columns) == 0:
                         df._set_inconsistent()
-                        df.append_op(f"-> {df._type} (no columns left)")
+                        df._append_op(f"-> {df._type} (no columns left)")
                         warnings.warn(f"After dropping columns, no columns left in relation \n {df}", UserWarning)
                     return df
 
@@ -498,7 +515,7 @@ class GataFrame:
         if inplace:
             self._rel = self._con.table(target_table_name) # pyright: ignore[reportOptionalMemberAccess]
             self._set_status(target_table_name, self.TypeTable)
-            self.append_op(f"insertInto({target_table_name})")
+            self._append_op(f"insertInto({target_table_name})")
             return self
         else:
             return GataFrame(self._con.table(target_table_name), self._con, op=f"insertInto({target_table_name})", type_=self.TypeTable)     # pyright: ignore[reportOptionalMemberAccess]
@@ -509,7 +526,7 @@ class GataFrame:
         if inplace:
             self._rel = new_rel
             self._reset()
-            self.append_op(f"union()")
+            self._append_op(f"union()")
             return self
         else:            
             return GataFrame(new_rel, self._con, op=f"union()", type_=self.TypeRelation)
@@ -542,7 +559,7 @@ class GataFrame:
             self._rel = new_df
             self._reset()
             self._alias = alias
-            self.append_op(op)
+            self._append_op(op)
             return self
         else:
             return self._create_from_relation(new_df, alias=alias, op=op)
@@ -556,7 +573,7 @@ class GataFrame:
         if inplace:
             self._rel = new_df
             self._reset()
-            self.append_op(op)
+            self._append_op(op)
             return self
         else:
             return self._create_from_relation(new_df, op=op)
@@ -582,7 +599,7 @@ class GataFrame:
         if inplace:
             self._rel = new_df
             self._reset()
-            self.append_op(op)
+            self._append_op(op)
             return self
         else:
             return self._create_from_relation(new_df, op=op)
@@ -643,13 +660,46 @@ class GataFrame:
         return DataSchema.model_validate(schema)
 
 
-    def toPandas(self):
+    def toPandas(self) -> pd.DataFrame:
         dtypes: dict[str, DuckDBPyType] = self.dtypes
         rel = self._rel
         for name, dtype in dtypes.items():
-            if str(dtype).upper() in ("GEOMETRY",):
+            if str(dtype).upper().startswith("GEOMETRY"):
                 rel = rel.select(f'* REPLACE(st_astext("{name}") AS "{name}")')                
         return rel.df()
+    
+    def toGeoPandas(self, geometry:str="geometry", crs:str="EPSG:4326") -> gpd.GeoDataFrame:
+        dtypes: dict[str, DuckDBPyType] = self.dtypes
+        rel = self._rel
+        for name, dtype in dtypes.items():
+            if str(dtype).upper().startswith("GEOMETRY"):
+                rel = rel.select(f'* REPLACE(st_astext("{name}") AS "{name}")')                
+        df = rel.df()
+        gdf = gpd.GeoDataFrame(
+            df.drop(columns=[geometry]),
+            geometry=gpd.GeoSeries.from_wkt(df[geometry]),
+            crs=crs
+        )
+        return gdf
+
+    def toPandasOrGeoPandas(self, geometry:str="geometry", crs:str="EPSG:4326") -> pd.DataFrame | gpd.GeoDataFrame:
+        dtypes: dict[str, DuckDBPyType] = self.dtypes
+        rel = self._rel
+        geometry_found: bool = False
+        for name, dtype in dtypes.items():
+            if str(dtype).upper() in ("GEOMETRY",):
+                rel = rel.select(f'* REPLACE(st_astext("{name}") AS "{name}")')                
+                geometry_found = True
+        df = rel.df()
+        if not geometry_found:
+            return df
+        else:        
+            gdf = gpd.GeoDataFrame(
+                df.drop(columns=[geometry]),
+                geometry=gpd.GeoSeries.from_wkt(df[geometry]),
+                crs=crs
+            )
+            return gdf
     
     def _norm(self, t: str | None) -> str:
         if t is None:
@@ -875,8 +925,21 @@ class GataFrame:
             op="apply_schema()"
             self._rel = new_df._rel
             self._reset()
-            self.append_op(op)
+            self._append_op(op)
             return self
         else:            
             return new_df
 
+    @staticmethod
+    def qident(name: str | None, cols: set[str] | list[str] | None=None) -> str:
+        if name is None:
+            return ""
+        if cols is None:
+            return '"' + str(name).replace('"', '""') + '"'
+        if name.strip() in cols:
+            return '"' + str(name).replace('"', '""') + '"'
+        return name
+
+    @staticmethod
+    def qname(*parts: str) -> str:
+        return ".".join(GataFrame.qident(p, None) for p in parts if p)

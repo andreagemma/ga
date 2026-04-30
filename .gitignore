@@ -1,6 +1,16 @@
+
 .gitignore
-.venv/
+.github/
+.github/*
+
 __pycache__/
 *.pyc
 .vscode/
 .requirements_*
+requirements.*
+
+*.egg-info/
+.pytest_cache/
+tests/
+.mytest/
+.mytest/*
